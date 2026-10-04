@@ -4,6 +4,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:get/get.dart';
+import './digital_key_page.dart';
+import '../controllers/digital_key_controller.dart';
 
 class BleTabPage extends StatefulWidget {
   const BleTabPage({super.key});
@@ -74,7 +77,7 @@ class _BleTabPageState extends State<BleTabPage> {
           duration: const Duration(milliseconds: 200),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: selected ? const Color(0xFF007AFF) : const Color(0xFFE9EDF2),
+            color: selected ? const Color(0xFFFF8A15) : const Color(0xFFE9EDF2),
             borderRadius: BorderRadius.circular(22),
           ),
           child: Text(
@@ -203,6 +206,7 @@ class _BbBbScanPageStateState extends State<BbBbScanPageState> {
 
   List<ScanResult> _scanResults = [];
   bool _isScanning = false;
+  bool _isConnecting = false;
   late StreamSubscription<BluetoothAdapterState> _adapterStateStateSubscription;
   late StreamSubscription<List<ScanResult>> _scanResultsSubscription;
 
@@ -293,12 +297,33 @@ class _BbBbScanPageStateState extends State<BbBbScanPageState> {
     debugPrint('${DateTime.now()} startScan调用完成');
   }
 
-  _onDeviceTap() async {
-    print('onDeviceTap');
-  }
+  _onDeviceTap(BluetoothDevice device) async {
+    debugPrint('${device.remoteId} _onDeviceTap');
+    if (_isConnecting) return;
+    _isConnecting = true;
+    Get.snackbar('开始连接123', device.remoteId.str);
 
-  List<Widget> _buildDeviceTitles() {
-    return _scanResults.map((d) => Text(d.device.platformName)).toList();
+    try {
+      await FlutterBluePlus.stopScan();
+      await device.connect(license: License.nonprofit);
+    } catch (e) {
+      _isConnecting = false;
+
+      if (mounted) {
+        Get.snackbar('连接失败', e.toString());
+      }
+      return;
+    }
+
+    _isConnecting = false;
+    if (!mounted) return;
+
+    // 单独Binding的写法；还有集中在GetMaterialApp的getPages + Get.toNamed写法
+    Get.to(() => const DigitalKeyPage(), binding: BindingsBuilder(() {
+      Get.lazyPut<DigitalKeyController>(
+        () => DigitalKeyController(device),
+      );
+    }));
   }
 
   @override
@@ -316,7 +341,7 @@ class _BbBbScanPageStateState extends State<BbBbScanPageState> {
                   name: result.device.platformName,
                   rssi: result.rssi,
                   id: result.device.remoteId.str,
-                  onConnect: _onDeviceTap,
+                  onConnect: () => _onDeviceTap(result.device),
                 );
               },
             ),
@@ -326,13 +351,16 @@ class _BbBbScanPageStateState extends State<BbBbScanPageState> {
               width: double.infinity,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF007AFF)),
+                  backgroundColor: const Color(0xFFFF8A15),
+                  foregroundColor: Colors.white,
+                  // textStyle: TextStyle(color: Colors.white),
+                ),
                 onPressed: () {
                   _isScanning ? FlutterBluePlus.stopScan() : onStartSearch();
                 },
                 child: _isScanning ? const Text('停止扫描') : const Text('开始扫描'),
               ),
-            )
+            ),
           ],
         ));
   }
