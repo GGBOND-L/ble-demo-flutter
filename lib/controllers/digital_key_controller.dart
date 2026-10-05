@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../models/operation_record.dart';
 import '../models/command_exchange.dart';
+import '../services/ble_session_service.dart';
 // import 'dart:convert';
 
 enum ControlType {
@@ -14,8 +15,10 @@ enum ControlType {
 }
 
 class DigitalKeyController extends GetxController {
-  DigitalKeyController(this.device);
+  DigitalKeyController(this.device)
+      : session = Get.find<BleSessionService>().getOrCreate(device);
   final BluetoothDevice device;
+  final BleDeviceSession session;
 
   BluetoothCharacteristic? _ffe4;
   BluetoothCharacteristic? _ffe9;
@@ -26,11 +29,18 @@ class DigitalKeyController extends GetxController {
 
   final message = '通信准备中...'.obs;
   final isReady = false.obs;
-  final authStatus = 'fail'.obs;
+  // 保留原有访问方式，但实际读取的是会话中的共享状态。
+// 页面重新创建时，不会再把认证状态初始化为 fail。
+  RxString get authStatus => session.authStatus;
   final connectionState = BluetoothConnectionState.disconnected.obs;
 
   bool get isConnected =>
       connectionState.value == BluetoothConnectionState.connected;
+
+  // 控车前必须已连接、密码验证成功，并且服务与通知已准备完成。
+  // 页面和指令入口共用这个条件，避免两处判断不一致。
+  bool get canControl =>
+      isConnected && authStatus.value == 'success' && isReady.value;
 
   late List<int> controlPacket;
   final controllerStatusMessage = ''.obs;
@@ -230,6 +240,11 @@ class DigitalKeyController extends GetxController {
     _connectionStateSubscription =
         device.connectionState.listen((BluetoothConnectionState state) {
       connectionState.value = state;
+      // 密码验证只对当前连接有效，断开后清除，重连必须重新验证。
+      if (state == BluetoothConnectionState.disconnected) {
+        // 通信准备状态属于当前连接，断开后失效。
+        isReady.value = false;
+      }
     });
     prepareConnection(); // 连接设备
   }
@@ -256,7 +271,10 @@ class DigitalKeyController extends GetxController {
       6: '密码输入错误5次,冻结$freezeTime分钟',
     };
     debugPrint('parseB6Response状态:$status');
-    if (status == 1) authStatus.value = 'success';
+    // 只有“密码正确”允许控车，其余结果清除之前的验证成功状态。
+    // 验证结果保存到设备会话，页面关闭后仍保留。
+    // 非成功结果会清除之前的认证状态。
+    session.updateAuthentication(status == 1);
 
     message.value = statusMap[status] ?? '未知状态';
     final result = message.value;
@@ -459,8 +477,9 @@ class DigitalKeyController extends GetxController {
   }
 
   void startControlCommand(controlType) {
-    if (isConnected == false || isReady.value == false) {
-      debugPrint('设备未连接');
+    // 指令入口也校验权限，防止直接调用方法绕过页面按钮的禁用状态。
+    if (!canControl) {
+      debugPrint('控车条件未满足：需要已连接、密码验证成功且通信准备完成');
       return;
     }
     final operation = OperationRecord(

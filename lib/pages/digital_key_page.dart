@@ -32,9 +32,13 @@ class DigitalKeyPage extends GetView<DigitalKeyController> {
                     return Text(
                         '连接状态: ${controller.isConnected ? '已连接' : '未连接'}');
                   }),
-                  Obx(() {
-                    return Text('认证状态: ${controller.message}');
-                  }),
+                  Obx(() => Text(
+                        '认证状态：'
+                        '${controller.authStatus.value == 'success' ? '已通过密码验证' : '未通过密码验证'}',
+                      )),
+                  Obx(() => Text(
+                        '通信状态：${controller.message.value}',
+                      )),
                 ],
               )),
 
@@ -191,35 +195,46 @@ class DigitalKeyPage extends GetView<DigitalKeyController> {
   }
 
   Widget _buildControlButton(String title, VoidCallback onTap) {
-    return Container(
-      decoration:
-          BoxDecoration(borderRadius: BorderRadius.circular(16), boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.05), // 设置阴影颜色
-          blurRadius: 8, // 设置阴影模糊程度
-          offset: const Offset(0, 2), // 设置阴影偏移量
+    // 监听连接、密码验证和通信准备状态，任一条件不满足就禁用控车。
+    return Obx(() {
+      final enabled = controller.canControl;
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05), // 设置阴影颜色
+              blurRadius: 8, // 设置阴影模糊程度
+              offset: const Offset(0, 2), // 设置阴影偏移量
+            ),
+          ],
         ),
-      ]),
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        clipBehavior: Clip.antiAlias, // 防止圆角溢出
-        child: InkWell(
-            onTap: onTap,
+        child: Material(
+          color: enabled ? Colors.white : const Color(0xFFF2F2F2),
+          borderRadius: BorderRadius.circular(16),
+          clipBehavior: Clip.antiAlias, // 防止圆角溢出
+          child: InkWell(
+            // InkWell 的 onTap 为 null 时不会响应点击，也不会显示点击水波纹。
+            onTap: enabled ? onTap : null,
             child: SizedBox(
-                height: 50, // 设置按钮高度
-                child: Center(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      color: Color(0xFF333333),
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+              height: 50, // 设置按钮高度
+              child: Center(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: enabled
+                        ? const Color(0xFF333333)
+                        : const Color(0xFFAAAAAA),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
                   ),
-                ))),
-      ),
-    );
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    });
   }
 
   Widget _buildRecordItem(
