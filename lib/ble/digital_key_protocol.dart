@@ -1,0 +1,220 @@
+enum ControlType { lock, unlock, alarm, unboot }
+
+/// 数字钥匙协议：固定报文及操作映射。
+// 控制指令流程  A2 → [A3] → Ax → [A6]
+// 控制权限申请发送 A2: BD 11 A2 00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F 17
+// 开锁发送 A5: BD 11 A5 BD 6A 3C C0 E7 B0 8F 2A C3 90 DE A3 2D 7B 63 3E FC
+// 锁车发送 A4: BD 11 A4 2C D2 05 B6 5E FD 8F 38 F3 A6 DA 5C F9 EF 90 99 D2
+// 寻车发送 C2: BD 11 C2 B6 17 C1 F6 FD 44 A0 7B 6D 69 16 32 C6 08 C8 7E 5D
+// 开尾箱发送 C1: BD 11 C1 41 2B 04 AC EA BA DE 9E 5F 92 70 49 E5 F6 85 8B 9F
+abstract final class DigitalKeyProtocol {
+  // 密码验证流程：B1 × 2 → B2 → 收到 B3 → B4 → 收到 B6。
+  static const List<int> b1Packet = [
+    0xBD,
+    0x11,
+    0xB1,
+    0x00,
+    0x01,
+    0x02,
+    0x03,
+    0x04,
+    0x05,
+    0x06,
+    0x07,
+    0x08,
+    0x09,
+    0x0A,
+    0x0B,
+    0x0C,
+    0x0D,
+    0x0E,
+    0x0F,
+    0x08,
+  ];
+
+  static const List<int> b2Packet = [
+    0xBD,
+    0x11,
+    0xB2,
+    0x00,
+    0x01,
+    0x02,
+    0x03,
+    0x04,
+    0x05,
+    0x06,
+    0x07,
+    0x08,
+    0x09,
+    0x0A,
+    0x0B,
+    0x0C,
+    0x0D,
+    0x0E,
+    0x0F,
+    0x07,
+  ];
+
+  static const List<int> b4Packet = [
+    0xBD,
+    0x11,
+    0xB4,
+    0xFC,
+    0x6D,
+    0x67,
+    0x39,
+    0x54,
+    0x70,
+    0x1B,
+    0xA1,
+    0x84,
+    0xC6,
+    0xA9,
+    0x4A,
+    0xB8,
+    0xDC,
+    0x6E,
+    0x18,
+    0x9D,
+  ];
+
+  // 控制权限申请报文。
+  static const List<int> a2Packet = [
+    0xBD,
+    0x11,
+    0xA2,
+    0x00,
+    0x01,
+    0x02,
+    0x03,
+    0x04,
+    0x05,
+    0x06,
+    0x07,
+    0x08,
+    0x09,
+    0x0A,
+    0x0B,
+    0x0C,
+    0x0D,
+    0x0E,
+    0x0F,
+    0x17,
+  ];
+
+  // 锁车。
+  static const List<int> a4Packet = [
+    0xBD,
+    0x11,
+    0xA4,
+    0x2C,
+    0xD2,
+    0x05,
+    0xB6,
+    0x5E,
+    0xFD,
+    0x8F,
+    0x38,
+    0xF3,
+    0xA6,
+    0xDA,
+    0x5C,
+    0xF9,
+    0xEF,
+    0x90,
+    0x99,
+    0xD2,
+  ];
+
+  // 解锁。
+  static const List<int> a5Packet = [
+    0xBD,
+    0x11,
+    0xA5,
+    0xBD,
+    0x6A,
+    0x3C,
+    0xC0,
+    0xE7,
+    0xB0,
+    0x8F,
+    0x2A,
+    0xC3,
+    0x90,
+    0xDE,
+    0xA3,
+    0x2D,
+    0x7B,
+    0x63,
+    0x3E,
+    0xFC,
+  ];
+
+  // 寻车。
+  static const List<int> c2Packet = [
+    0xBD,
+    0x11,
+    0xC2,
+    0xB6,
+    0x17,
+    0xC1,
+    0xF6,
+    0xFD,
+    0x44,
+    0xA0,
+    0x7B,
+    0x6D,
+    0x69,
+    0x16,
+    0x32,
+    0xC6,
+    0x08,
+    0xC8,
+    0x7E,
+    0x5D,
+  ];
+
+  // 开尾箱。
+  static const List<int> c1Packet = [
+    0xBD,
+    0x11,
+    0xC1,
+    0x41,
+    0x2B,
+    0x04,
+    0xAC,
+    0xEA,
+    0xBA,
+    0xDE,
+    0x9E,
+    0x5F,
+    0x92,
+    0x70,
+    0x49,
+    0xE5,
+    0xF6,
+    0x85,
+    0x8B,
+    0x9F,
+  ];
+
+  /// 根据操作选择报文，必须覆盖全部枚举值。
+  static List<int> packetFor(ControlType type) {
+    return switch (type) {
+      ControlType.lock => a4Packet,
+      ControlType.unlock => a5Packet,
+      ControlType.alarm => c2Packet,
+      ControlType.unboot => c1Packet,
+    };
+  }
+
+  /// 操作记录中显示的名称。
+  static String nameFor(ControlType type) {
+    return switch (type) {
+      ControlType.lock => '锁车',
+      ControlType.unlock => '解锁',
+      ControlType.alarm => '寻车',
+      ControlType.unboot => '尾箱',
+    };
+  }
+}

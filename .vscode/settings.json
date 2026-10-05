@@ -1,0 +1,10 @@
+{
+  "dart.flutterSdkPath": "D:/dev/fvm/versions/3.38.5",
+  "terminal.integrated.env.windows": {
+    "PATH": "D:\\dev\\fvm\\versions\\3.38.5\\bin;${env:PATH}"
+  },
+  "[dart]": {
+    "editor.defaultFormatter": "Dart-Code.dart-code",
+    "editor.formatOnSave": true
+  }
+}
